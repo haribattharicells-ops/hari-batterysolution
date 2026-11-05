@@ -1,3 +1,4 @@
 pyTelegramBotAPI
 openai
 langdetect
+gtts
