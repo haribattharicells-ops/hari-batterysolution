@@ -95,5 +95,13 @@ def all_msg(message):
         send_voice(message.chat.id, ans[:300])
     send_to_private(f"{message.from_user.first_name} (@{message.from_user.username})", message.text, ans, ai_name)
 
-print("Hari Battery Solutions Bot Started...")
-bot.infinity_polling()
+import threading
+
+def run_bot():
+    print("Hari Battery Solutions Bot Started...")
+    bot.infinity_polling()
+
+threading.Thread(target=run_bot, daemon=True).start()
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=10000)
