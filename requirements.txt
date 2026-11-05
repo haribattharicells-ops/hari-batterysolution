@@ -3,3 +3,4 @@ openai
 langdetect
 gtts
 google-generative ai
+requests
