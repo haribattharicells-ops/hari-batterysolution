@@ -6,29 +6,35 @@ from gtts import gTTS
 from openai import OpenAI
 from datetime import datetime
 
+# --- CONFIG ---
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 OPENAI_KEY = os.environ.get("OPENAI_API_KEY")
 PRIVATE_CHANNEL_ID = -1004339378274
 PAYMENT_LINK = "https://chanpay.in/haribattery"
+COURSE_PRICE = "Rs.99 Only"
 
 bot = telebot.TeleBot(BOT_TOKEN)
 openai_client = OpenAI(api_key=OPENAI_KEY) if OPENAI_KEY else None
 
 def send_to_private(user, q, ans, ai_name):
     try:
-        log = f"🔒 HARI BATTERY LOG [{ai_name}]\n👤 {user}\n💬 Q: {q}\n🤖 A: {ans[:500]}...\n⏰ {datetime.now().strftime('%d-%m-%Y %H:%M:%S')}"
+        log = f"LOG [{ai_name}]\nUser: {user}\nQ: {q}\nA: {ans[:500]}...\nTime: {datetime.now().strftime('%d-%m-%Y %H:%M:%S')}"
         bot.send_message(PRIVATE_CHANNEL_ID, log)
     except:
         pass
 
-@bot.message_handler(commands=['start'])
+@bot.message_handler(commands=['start', 'help'])
 def start(message):
-    bot.reply_to(message, "Vanakkam Thalaivare! 🔋\n\nHari Battery Solutions VIP Course - Rs.99 Only!\n\nPayment pannunga, VIP Channel-la sernthudalam!\n\nPayment Link: " + PAYMENT_LINK + "\n\nPayment pannitu Screenshot anupunga!")
+    bot.reply_to(message, "Vanakkam Thalaivare! 🔋\n\nHari Battery Solutions VIP Course - Rs.99 Only!\n\nPayment Link: " + PAYMENT_LINK + "\n\nPayment pannitu Screenshot anupunga!\n\nEnna venum? Battery pathi ethu venalum kelunga!")
 
-@bot.message_handler(commands=['pay'])
+@bot.message_handler(commands=['pay', 'course', 'price'])
 def pay(message):
-    bot.reply_to(message, "Payment Link: " + PAYMENT_LINK + "\n\nRs.99 - VIP Course")
+    bot.reply_to(message, "📚 Hari Battery VIP Course\n\nPrice: " + COURSE_PRICE + "\n\nPayment Link: " + PAYMENT_LINK + "\n\nPayment pannitu Screenshot anupunga, VIP Channel link tharom!")
+
+@bot.message_handler(commands=['call'])
+def call(message):
+    bot.reply_to(message, "📞 Hari Anna: 98410 12345\n\nAana enkitteye kelunga Thalaivare, naane pathil solliduren!")
 
 def ask_gemini(question):
     try:
@@ -43,7 +49,7 @@ def ask_gemini(question):
                 messages=[{"role": "system", "content": "You are Hari Battery Solutions expert. Answer in Tamil Tanglish, friendly Thalaivare style."}, {"role": "user", "content": question}]
             )
             return r.choices[0].message.content, "ChatGPT-Backup"
-        except Exception as e:
+        except:
             return "Sorry Thalaivare, konjam network problem. Thirumba kelunga!", "Error"
 
 def send_voice(chat_id, text):
@@ -66,13 +72,22 @@ def voice_handler(message):
         answer, ai_name = ask_gemini("User sent a voice message in Tamil about battery. Reply in Tamil, simple.")
         send_voice(message.chat.id, answer)
         send_to_private(message.from_user.first_name, "Voice Message", answer, ai_name)
-    except Exception as e:
+    except:
         bot.reply_to(message, "Voice-la problem Thalaivare, text-la kelunga!")
 
 @bot.message_handler(func=lambda m: True)
 def all_msg(message):
+    text = message.text.lower() if message.text else ""
+    if "vanakkam" in text or "hi" in text or "hello" in text:
+        bot.reply_to(message, "Vanakkam Thalaivare! 🙏 Enna venum? Course venuma? /pay -nu type pannunga!")
+        return
+    if "course" in text or "price" in text or "vilai" in text or "99" in text:
+        bot.reply_to(message, "📚 VIP Course - Rs.99 Only!\n\nPayment Link: " + PAYMENT_LINK)
+        return
     ans, ai_name = ask_gemini(message.text)
     bot.reply_to(message, ans)
+    if len(ans) > 100:
+        send_voice(message.chat.id, ans[:300])
     send_to_private(f"{message.from_user.first_name} (@{message.from_user.username})", message.text, ans, ai_name)
 
 print("Hari Battery Solutions Bot Started...")
