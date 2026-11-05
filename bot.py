@@ -1,73 +1,79 @@
-import telebot, openai, base64, os
-from langdetect import detect
 
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-OPENAI_KEY = os.getenv("OPENAI_KEY")
-CHANNEL_ID = -1004339378274
+import telebot
+import requests
+import os
+from gtts import gTTS
+from openai import OpenAI
+from datetime import datetime
+
+BOT_TOKEN = os.environ.get("BOT_TOKEN")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+OPENAI_KEY = os.environ.get("OPENAI_API_KEY")
+PRIVATE_CHANNEL_ID = -1004339378274
+PAYMENT_LINK = "https://chanpay.in/haribattery"
 
 bot = telebot.TeleBot(BOT_TOKEN)
-client = openai.OpenAI(api_key=OPENAI_KEY)
+openai_client = OpenAI(api_key=OPENAI_KEY) if OPENAI_KEY else None
 
-LANG_MAP = {"ta": "Tamil", "en": "English", "hi": "Hindi"}
-
-def get_lang(text):
+def send_to_private(user, q, ans, ai_name):
     try:
-        lang = detect(text)
-        if lang not in LANG_MAP: lang = "ta"
-        return lang
-    except: return "ta"
+        log = f"🔒 HARI BATTERY LOG [{ai_name}]\n👤 {user}\n💬 Q: {q}\n🤖 A: {ans[:500]}...\n⏰ {datetime.now().strftime('%d-%m-%Y %H:%M:%S')}"
+        bot.send_message(PRIVATE_CHANNEL_ID, log)
+    except:
+        pass
 
-def ask_gpt(prompt, lang_code, image_b64=None):
-    lang_name = LANG_MAP.get(lang_code, "Tamil")
-    system = f"You are Hari Battery expert. Reply ONLY in {lang_name} language. User language is {lang_name}. If Tamil, use Thalaivare style. If Hindi/English, use respectful style."
-    messages = [{"role": "system", "content": system}]
-    if image_b64:
-        messages.append({"role": "user", "content": [
-            {"type": "text", "text": prompt},
-            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_b64}"}}
-        ]})
-    else:
-        messages.append({"role": "user", "content": prompt})
-    res = client.chat.completions.create(model="gpt-4o", messages=messages)
-    return res.choices[0].message.content
+@bot.message_handler(commands=['start'])
+def start(message):
+    bot.reply_to(message, "Vanakkam Thalaivare! 🔋\n\nHari Battery Solutions VIP Course - Rs.99 Only!\n\nPayment pannunga, VIP Channel-la sernthudalam!\n\nPayment Link: " + PAYMENT_LINK + "\n\nPayment pannitu Screenshot anupunga!")
 
-@bot.message_handler(content_types=['text'])
-@bot.channel_post_handler(content_types=['text'])
-def text_handler(message):
-    text = message.text or message.channel_post.text if hasattr(message, 'channel_post') else message.text
-    lang = get_lang(text)
-    reply = ask_gpt(text, lang)
-    bot.send_message(message.chat.id if hasattr(message, 'chat') else CHANNEL_ID, reply)
+@bot.message_handler(commands=['pay'])
+def pay(message):
+    bot.reply_to(message, "Payment Link: " + PAYMENT_LINK + "\n\nRs.99 - VIP Course")
 
-@bot.message_handler(content_types=['photo'])
-@bot.channel_post_handler(content_types=['photo'])
-def photo_handler(message):
-    chat_id = message.chat.id
-    file_id = message.photo[-1].file_id
-    f = bot.get_file(file_id)
-    img = bot.download_file(f.file_path)
-    b64 = base64.b64encode(img).decode()
-    caption = message.caption if hasattr(message, 'caption') and message.caption else "What is fault in this battery?"
-    lang = get_lang(caption)
-    prompt = f"Analyze this battery image fault. Question: {caption}"
-    reply = ask_gpt(prompt, lang, b64)
-    bot.send_message(chat_id, f"🔍 {reply}")
+def ask_gemini(question):
+    try:
+        url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" + GEMINI_API_KEY
+        data = {"contents": [{"parts": [{"text": "You are Hari Battery Solutions expert. Answer in Tamil, simple Tanglish, friendly like Thalaivare style. Question: " + question}]}]}
+        res = requests.post(url, json=data, timeout=20)
+        return res.json()["candidates"][0]["content"]["parts"][0]["text"], "Gemini"
+    except:
+        try:
+            r = openai_client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "system", "content": "You are Hari Battery Solutions expert. Answer in Tamil Tanglish, friendly Thalaivare style."}, {"role": "user", "content": question}]
+            )
+            return r.choices[0].message.content, "ChatGPT-Backup"
+        except Exception as e:
+            return "Sorry Thalaivare, konjam network problem. Thirumba kelunga!", "Error"
+
+def send_voice(chat_id, text):
+    try:
+        tts = gTTS(text=text, lang='ta', slow=False)
+        tts.save("reply.mp3")
+        with open("reply.mp3", "rb") as audio:
+            bot.send_voice(chat_id, audio)
+    except:
+        bot.send_message(chat_id, text)
 
 @bot.message_handler(content_types=['voice'])
 def voice_handler(message):
-    file_info = bot.get_file(message.voice.file_id)
-    voice_file = bot.download_file(file_info.file_path)
-    with open("voice.ogg", "wb") as f: f.write(voice_file)
-    with open("voice.ogg", "rb") as f:
-        transcript = client.audio.transcriptions.create(model="whisper-1", file=f)
-    text = transcript.text
-    lang = get_lang(text)
-    reply_text = ask_gpt(text, lang)
-    tts = client.audio.speech.create(model="tts-1", voice="alloy", input=reply_text)
-    tts.stream_to_file("reply.mp3")
-    bot.send_message(message.chat.id, f"🗣️ Heard ({LANG_MAP[lang]}): {text}\n\n💬 Reply: {reply_text}")
-    with open("reply.mp3", "rb") as v:
-        bot.send_voice(message.chat.id, v)
+    try:
+        file_info = bot.get_file(message.voice.file_id)
+        downloaded = bot.download_file(file_info.file_path)
+        with open("voice.ogg", "wb") as f:
+            f.write(downloaded)
+        bot.reply_to(message, "Kural ketuchu Thalaivare! Konjam wait pannunga...")
+        answer, ai_name = ask_gemini("User sent a voice message in Tamil about battery. Reply in Tamil, simple.")
+        send_voice(message.chat.id, answer)
+        send_to_private(message.from_user.first_name, "Voice Message", answer, ai_name)
+    except Exception as e:
+        bot.reply_to(message, "Voice-la problem Thalaivare, text-la kelunga!")
 
-print("VIP 3 Language Bot READY! Tamil, English, Hindi!")
+@bot.message_handler(func=lambda m: True)
+def all_msg(message):
+    ans, ai_name = ask_gemini(message.text)
+    bot.reply_to(message, ans)
+    send_to_private(f"{message.from_user.first_name} (@{message.from_user.username})", message.text, ans, ai_name)
+
+print("Hari Battery Solutions Bot Started...")
 bot.infinity_polling()
