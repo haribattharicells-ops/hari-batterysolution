@@ -16,7 +16,7 @@ BOT_TOKEN = os.environ.get("BOT_TOKEN")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 OPENAI_KEY = os.environ.get("OPENAI_API_KEY")
 PRIVATE_CHANNEL_ID = -1004339378274
-PAYMENT_LINK = "https://chanpay.in/haribattery"
+PAYMENT_LINK = ""
 COURSE_PRICE = "Rs.99 Only"
 
 bot = telebot.TeleBot(BOT_TOKEN)
